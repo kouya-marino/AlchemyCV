@@ -49,7 +49,20 @@ class AdvancedFilterApp:
             'Adaptive Threshold': {'type': 'adaptive_thresh', 'params': {'Adaptive Method': {'options': ['Mean C', 'Gaussian C'], 'default': 'Gaussian C'}, 'Threshold Type': {'options': ['Binary', 'Binary Inverted'], 'default': 'Binary'}, 'Block Size': {'range': (3, 55), 'default': 11}, 'C (Constant)': {'range': (-30, 30), 'default': 2}}},
             "Otsu's Binarization": {'type': 'otsu', 'params': {'Threshold Type': {'options': ['Binary', 'Binary Inverted'], 'default': 'Binary'}}}
         }
-        
+        self.edge_detection_data = {
+            'Canny': {'type': 'canny', 'params': {'Threshold 1': {'range': (0, 255), 'default': 50}, 'Threshold 2': {'range': (0, 255), 'default': 150}}},
+            'Sobel': {'type': 'sobel', 'params': {'Kernel Size': {'range': (1, 31), 'default': 3}, 'Direction': {'options': ['X', 'Y', 'Magnitude'], 'default': 'Magnitude'}}},
+        }
+        self.morph_ops_data = {
+            'Erode': {'var': tk.BooleanVar(value=False), 'kernel_var': tk.IntVar(value=3)},
+            'Dilate': {'var': tk.BooleanVar(value=False), 'kernel_var': tk.IntVar(value=3)},
+            'Open': {'var': tk.BooleanVar(value=False), 'kernel_var': tk.IntVar(value=3)},
+            'Close': {'var': tk.BooleanVar(value=False), 'kernel_var': tk.IntVar(value=3)},
+            'Gradient': {'var': tk.BooleanVar(value=False), 'kernel_var': tk.IntVar(value=3)},
+            'Top Hat': {'var': tk.BooleanVar(value=False), 'kernel_var': tk.IntVar(value=3)},
+            'Black Hat': {'var': tk.BooleanVar(value=False), 'kernel_var': tk.IntVar(value=3)},
+        }
+
         # --- TKinter Variables ---
         self.selected_preproc = tk.StringVar(value='None')
         self.selected_enhancement = tk.StringVar(value='None')
@@ -58,11 +71,19 @@ class AdvancedFilterApp:
         self.selected_channel = tk.StringVar()
         self.selected_filter = tk.StringVar(value=list(self.filter_data.keys())[0])
         self.param_vars = {}
+        self.edge_enabled = tk.BooleanVar(value=False)
+        self.selected_edge_filter = tk.StringVar(value='Canny')
+        self.morph_enabled = tk.BooleanVar(value=False)
+        self.contours_enabled = tk.BooleanVar(value=False)
+        self.draw_contours = tk.BooleanVar(value=True)
+        self.contour_min_area = tk.IntVar(value=50)
+        self.object_count_text = tk.StringVar(value="Objects Found: --")
         
         # --- Widget Storage ---
         self.preproc_param_widgets = []
         self.enhancement_param_widgets = []
         self.param_widgets = []
+        self.edge_param_widgets, self.morph_param_widgets = [], []
 
         self._create_widgets()
         self._initialize_ui_states()
@@ -101,14 +122,14 @@ class AdvancedFilterApp:
         self.enhancement_parameter_frame = ttk.Frame(enhancement_frame, padding=(0, 10, 0, 0))
         self.enhancement_parameter_frame.pack(fill=tk.X)
         
-        channel_frame = ttk.LabelFrame(controls_frame, text="4. Channel Extractor", padding="10")
+        channel_frame = ttk.LabelFrame(controls_frame, text="3. Channel Extractor", padding="10")
         channel_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
         ttk.Checkbutton(channel_frame, text="Enable", variable=self.channel_enabled, command=self.on_channel_viewer_toggle).pack(anchor='w')
         self.channel_controls_container = ttk.Frame(channel_frame)
         self.channel_controls_container.pack(fill=tk.X, pady=5)
         self._create_channel_controls()
         
-        self.filter_frame = ttk.LabelFrame(controls_frame, text="5. Mask Generation", padding="10")
+        self.filter_frame = ttk.LabelFrame(controls_frame, text="4. Mask Generation", padding="10")
         self.filter_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
         self.filter_menubutton = ttk.Menubutton(self.filter_frame, textvariable=self.selected_filter, direction='flush')
         filter_menu = tk.Menu(self.filter_menubutton, tearoff=False)
@@ -119,12 +140,22 @@ class AdvancedFilterApp:
         self.parameter_frame = ttk.Frame(self.filter_frame, padding=(0, 10, 0, 0))
         self.parameter_frame.pack(fill=tk.X)
 
+        self.refinement_frame = ttk.LabelFrame(controls_frame, text="5. Mask Refinement", padding="10")
+        self.refinement_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
+        self._create_refinement_controls()
+        
+        self._create_contour_controls(controls_frame)
+
     def _initialize_ui_states(self):
         self.on_preproc_change()
         self.on_enhancement_change()
         self.on_color_space_change()
         self.on_filter_change()
         self.on_channel_viewer_toggle()
+        self.on_edge_filter_change()
+        self.on_edge_toggle()
+        self.on_morph_toggle()
+        self.on_contour_toggle()
 
     def open_image(self):
         filepath = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.png *.bmp"), ("All files", "*.*")])
@@ -174,6 +205,38 @@ class AdvancedFilterApp:
     def on_filter_change(self, *args):
         self._build_filter_panel()
         self.apply_filter()
+        
+    def on_edge_toggle(self):
+        is_enabled = self.edge_enabled.get()
+        state = 'normal' if is_enabled else 'disabled'
+        for child in self.edge_controls_container.winfo_children():
+            try: child.config(state=state)
+            except tk.TclError: pass
+        filter_state = 'disabled' if is_enabled else 'normal'
+        for child in self.filter_frame.winfo_children():
+            try: child.config(state=filter_state)
+            except tk.TclError: pass
+        self.apply_filter()
+
+    def on_morph_toggle(self):
+        is_enabled = self.morph_enabled.get()
+        state = 'normal' if is_enabled else 'disabled'
+        for child in self.morph_controls_container.winfo_children():
+            try: child.config(state=state)
+            except tk.TclError: pass
+        self.apply_filter()
+
+    def on_contour_toggle(self):
+        is_enabled = self.contours_enabled.get()
+        state = 'normal' if is_enabled else 'disabled'
+        for child in self.contour_controls_container.winfo_children():
+            try: child.config(state=state)
+            except tk.TclError: pass
+        self.apply_filter()
+
+    def on_edge_filter_change(self, event=None):
+        self._create_dynamic_panel(self.edge_detection_data, 'selected_edge_filter', self.edge_parameter_frame, self.edge_param_widgets, 'edge')
+        self.apply_filter()
 
     # --- Main Processing Pipeline ---
     def apply_filter(self, event=None):
@@ -186,13 +249,28 @@ class AdvancedFilterApp:
             if self.channel_enabled.get():
                 image_for_masking = self._process_channel_extraction(enhanced_image)
             
-            mask = self._process_mask_generation(image_for_masking)
+            if self.edge_enabled.get():
+                gray_for_edge = cv2.cvtColor(enhanced_image, cv2.COLOR_BGR2GRAY) if len(enhanced_image.shape) == 3 else enhanced_image
+                mask = self._process_edge_detection(gray_for_edge)
+            else:
+                mask = self._process_mask_generation(image_for_masking)
+            
             if mask is None: return
 
-            self.processed_cv_image = cv2.bitwise_and(self.original_cv_image, self.original_cv_image, mask=mask)
+            if self.morph_enabled.get():
+                mask = self._process_morph_ops(mask)
+
+            final_image = cv2.bitwise_and(self.original_cv_image, self.original_cv_image, mask=mask)
+            
+            if self.contours_enabled.get():
+                final_image = self._process_contours(mask, final_image.copy())
+
+            self.processed_cv_image = final_image
             self.update_image_display(self.processed_cv_image)
-        except (tk.TclError, KeyError, ValueError, IndexError):
+        except (tk.TclError, KeyError, ValueError, IndexError) as e:
+            # This will prevent crashes from sliders being updated before an image is loaded
             pass
+
 
     # --- Processing Sub-routines ---
     def _process_preprocessing(self, image):
@@ -254,35 +332,138 @@ class AdvancedFilterApp:
         if image_for_masking.ndim == 3: gray = cv2.cvtColor(image_for_masking, cv2.COLOR_BGR2GRAY)
         else: gray = image_for_masking.copy()
 
-        if filter_type == 'grayscale_range':
-            min_v = int(self.param_vars['filter_Min_Value'].get())
-            max_v = int(self.param_vars['filter_Max_Value'].get())
-            return cv2.inRange(gray, min_v, max_v)
-        elif filter_type == 'adaptive_thresh':
-            method = cv2.ADAPTIVE_THRESH_MEAN_C if self.param_vars['filter_Adaptive_Method'].get() == 'Mean C' else cv2.ADAPTIVE_THRESH_GAUSSIAN_C
-            type_f = cv2.THRESH_BINARY if self.param_vars['filter_Threshold_Type'].get() == 'Binary' else cv2.THRESH_BINARY_INV
-            bsize = int(self.param_vars['filter_Block_Size'].get())
-            c = int(self.param_vars['filter_C_(Constant)'].get())
-            if bsize % 2 == 0: bsize += 1
-            return cv2.adaptiveThreshold(gray, 255, method, type_f, bsize, c)
-        elif filter_type == "Otsu's Binarization":
-            type_f = cv2.THRESH_BINARY if self.param_vars["otsu_Threshold_Type"].get() == 'Binary' else cv2.THRESH_BINARY_INV
-            ret, mask = cv2.threshold(gray, 0, 255, type_f + cv2.THRESH_OTSU)
-            return mask
-        elif filter_type == 'color':
-            if image_for_masking.ndim == 2:
-                h, w = image_for_masking.shape[:2]
-                return np.zeros((h, w), dtype=np.uint8)
-            lower = np.array([self.param_vars[f'color_{c}_min'].get() for c in filter_config['channels']])
-            upper = np.array([self.param_vars[f'color_{c}_max'].get() for c in filter_config['channels']])
-            conv_map = {'RGB/BGR (Color Filter)': -1, 'HSV': cv2.COLOR_BGR2HSV, 'HLS': cv2.COLOR_BGR2HLS, 'Lab': cv2.COLOR_BGR2LAB, 'YCrCb': cv2.COLOR_BGR2YCrCb}
-            code = conv_map[filter_selection]
-            converted = cv2.cvtColor(image_for_masking, code) if code != -1 else image_for_masking
-            return cv2.inRange(converted, lower, upper)
+        try:
+            if filter_type == 'grayscale_range':
+                min_v = int(self.param_vars['filter_Min_Value'].get())
+                max_v = int(self.param_vars['filter_Max_Value'].get())
+                return cv2.inRange(gray, min_v, max_v)
+            elif filter_type == 'adaptive_thresh':
+                method = cv2.ADAPTIVE_THRESH_MEAN_C if self.param_vars['filter_Adaptive_Method'].get() == 'Mean C' else cv2.ADAPTIVE_THRESH_GAUSSIAN_C
+                type_f = cv2.THRESH_BINARY if self.param_vars['filter_Threshold_Type'].get() == 'Binary' else cv2.THRESH_BINARY_INV
+                bsize = int(self.param_vars['filter_Block_Size'].get())
+                c = int(self.param_vars['filter_C_(Constant)'].get())
+                if bsize > 1 and bsize % 2 == 0: bsize += 1
+                return cv2.adaptiveThreshold(gray, 255, method, type_f, bsize, c)
+            elif filter_type == "Otsu's Binarization":
+                type_f = cv2.THRESH_BINARY if self.param_vars["otsu_Threshold_Type"].get() == 'Binary' else cv2.THRESH_BINARY_INV
+                ret, mask = cv2.threshold(gray, 0, 255, type_f + cv2.THRESH_OTSU)
+                return mask
+            elif filter_type == 'color':
+                if image_for_masking.ndim == 2:
+                    h, w = image_for_masking.shape[:2]
+                    return np.zeros((h, w), dtype=np.uint8)
+                lower = np.array([self.param_vars[f'color_{c}_min'].get() for c in filter_config['channels']])
+                upper = np.array([self.param_vars[f'color_{c}_max'].get() for c in filter_config['channels']])
+                conv_map = {'RGB/BGR (Color Filter)': -1, 'HSV': cv2.COLOR_BGR2HSV, 'HLS': cv2.COLOR_BGR2HLS, 'Lab': cv2.COLOR_BGR2LAB, 'YCrCb': cv2.COLOR_BGR2YCrCb}
+                code = conv_map[filter_selection]
+                converted = cv2.cvtColor(image_for_masking, code) if code != -1 else image_for_masking
+                return cv2.inRange(converted, lower, upper)
+        except (KeyError, tk.TclError): # Fallback on error
+            h, w = image_for_masking.shape[:2]
+            return np.zeros((h, w), dtype=np.uint8)
+        
         h, w = image_for_masking.shape[:2]
         return np.zeros((h, w), dtype=np.uint8)
-    
+        
+    def _process_edge_detection(self, image_for_edge):
+        edge_filter = self.selected_edge_filter.get()
+        if edge_filter == 'Canny':
+            t1 = self.param_vars['edge_Threshold_1'].get()
+            t2 = self.param_vars['edge_Threshold_2'].get()
+            return cv2.Canny(image_for_edge, t1, t2)
+        elif edge_filter == 'Sobel':
+            ksize = self.param_vars['edge_Kernel_Size'].get()
+            if ksize > 0 and ksize % 2 == 0: ksize += 1
+            direction = self.param_vars['edge_Direction'].get()
+
+            sobelx = cv2.Sobel(image_for_edge, cv2.CV_64F, 1, 0, ksize=ksize)
+            sobely = cv2.Sobel(image_for_edge, cv2.CV_64F, 0, 1, ksize=ksize)
+            
+            if direction == 'X':
+                return cv2.convertScaleAbs(sobelx)
+            elif direction == 'Y':
+                return cv2.convertScaleAbs(sobely)
+            else: # Magnitude
+                magnitude = np.sqrt(sobelx**2 + sobely**2)
+                return cv2.convertScaleAbs(magnitude)
+        return image_for_edge
+
+    def _process_morph_ops(self, input_mask):
+        mask = input_mask.copy()
+        ops = {
+            'Erode': cv2.erode, 'Dilate': cv2.dilate, 'Open': cv2.MORPH_OPEN,
+            'Close': cv2.MORPH_CLOSE, 'Gradient': cv2.MORPH_GRADIENT,
+            'Top Hat': cv2.MORPH_TOPHAT, 'Black Hat': cv2.MORPH_BLACKHAT
+        }
+        for name, data in self.morph_ops_data.items():
+            if data['var'].get():
+                ksize = data['kernel_var'].get()
+                if ksize > 0:
+                    kernel = np.ones((ksize, ksize), np.uint8)
+                    if name in ['Erode', 'Dilate']:
+                        mask = ops[name](mask, kernel, iterations=1)
+                    else:
+                        mask = cv2.morphologyEx(mask, ops[name], kernel)
+        return mask
+
+    def _process_contours(self, mask, image_to_draw_on):
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        min_area = self.contour_min_area.get()
+        
+        filtered_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area]
+        
+        self.object_count_text.set(f"Objects Found: {len(filtered_contours)}")
+        
+        if self.draw_contours.get():
+            cv2.drawContours(image_to_draw_on, filtered_contours, -1, (0, 255, 0), 2)
+            
+        return image_to_draw_on
+
     # --- UI Builder Methods ---
+    def _create_refinement_controls(self):
+        edge_frame = ttk.LabelFrame(self.refinement_frame, text="Edge Detection (Overrides Mask Generation)", padding=5)
+        edge_frame.pack(fill=tk.X, pady=5)
+        ttk.Checkbutton(edge_frame, text="Enable", variable=self.edge_enabled, command=self.on_edge_toggle).pack(anchor='w')
+        self.edge_controls_container = ttk.Frame(edge_frame)
+        self.edge_controls_container.pack(fill=tk.X)
+        ttk.OptionMenu(self.edge_controls_container, self.selected_edge_filter, self.selected_edge_filter.get(), *self.edge_detection_data.keys(), command=self.on_edge_filter_change).pack(fill=tk.X, pady=(5,0))
+        self.edge_parameter_frame = ttk.Frame(self.edge_controls_container, padding=(0, 10, 0, 0))
+        self.edge_parameter_frame.pack(fill=tk.X)
+
+        morph_frame = ttk.LabelFrame(self.refinement_frame, text="Morphological Operations", padding=5)
+        morph_frame.pack(fill=tk.X, pady=5)
+        ttk.Checkbutton(morph_frame, text="Enable", variable=self.morph_enabled, command=self.on_morph_toggle).pack(anchor='w')
+        self.morph_controls_container = ttk.Frame(morph_frame)
+        self.morph_controls_container.pack(fill=tk.X)
+        self._create_morph_controls()
+
+    def _create_contour_controls(self, parent):
+        contour_frame = ttk.LabelFrame(parent, text="6. Contour Analysis", padding="10")
+        contour_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
+        ttk.Checkbutton(contour_frame, text="Enable", variable=self.contours_enabled, command=self.on_contour_toggle).pack(anchor='w')
+        self.contour_controls_container = ttk.Frame(contour_frame)
+        self.contour_controls_container.pack(fill=tk.X)
+        ttk.Checkbutton(self.contour_controls_container, text="Draw Contours on Image", variable=self.draw_contours, command=self.apply_filter).pack(anchor='w', pady=(5,0))
+        min_area_frame = self._create_param_row("Min Area", parent=self.contour_controls_container)
+        self._create_slider_and_entry(min_area_frame, self.contour_min_area, 0, 50000)
+        ttk.Label(self.contour_controls_container, textvariable=self.object_count_text, font=("Helvetica", 10, "bold")).pack(pady=5)
+
+    def _create_morph_controls(self):
+        for name, data in self.morph_ops_data.items():
+            frame = ttk.Frame(self.morph_controls_container)
+            frame.pack(fill=tk.X, pady=2)
+            frame.columnconfigure(2, weight=1)
+            
+            cb = ttk.Checkbutton(frame, text=f"{name}:", variable=data['var'], command=self.apply_filter)
+            cb.grid(row=0, column=0, sticky='w')
+            
+            ttk.Label(frame, text="Kernel").grid(row=0, column=1, padx=(10, 5))
+            
+            slider, entry = self._create_slider_and_entry(frame, data['kernel_var'], 1, 31, column_offset=1)
+            slider.grid_configure(row=0, column=2)
+            entry.grid_configure(row=0, column=3)
+            entry.config(width=5)
+
     def _create_channel_controls(self):
         frame1 = self._create_param_row('Color Space', parent=self.channel_controls_container)
         space_menu = ttk.OptionMenu(frame1, self.selected_color_space, self.selected_color_space.get(), *self.channel_data.keys(), command=self.on_color_space_change)
@@ -335,7 +516,7 @@ class AdvancedFilterApp:
         for p_name, p_data in params.items():
             frame = self._create_param_row(p_name, parent=parent_frame)
             widget_list.append(frame)
-            var_key = f"{param_prefix}_{p_name.replace(' ', '_')}"
+            var_key = f"{param_prefix}_{p_name.replace(' ', '_').replace('(', '').replace(')', '')}"
             if 'options' in p_data:
                 var = tk.StringVar(value=p_data['default'])
                 menu = ttk.OptionMenu(frame, var, p_data['default'], *p_data['options'], command=self.apply_filter)
