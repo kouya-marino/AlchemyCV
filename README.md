@@ -2,7 +2,7 @@
 
 AlchemyCV is a powerful desktop application built with Python. It provides a comprehensive suite of tools for real-time image processing, enhancement, filtering, and analysis.
 
-![AlchemyCV Screenshot]  <!-- Replace with a real screenshot URL -->
+![AlchemyCV Screenshot](https://raw.githubusercontent.com/kouya-marino/AlchemyCV/main/application.png)
 
 ## Features
 
