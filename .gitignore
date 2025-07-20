@@ -66,5 +66,3 @@ coverage.xml
 *   **Avoids Merge Conflicts:** IDE configuration files (`.idea/`, `.vscode/`) are often specific to your local machine and can cause conflicts when collaborating with others.
 *   **Improves Security:** It ensures you never accidentally commit sensitive information, like API keys, which might be stored in a `.env` file.
 *   **Reduces Repository Size:** It prevents large virtual environment folders from being uploaded, saving space and time when cloning the repository.
-
-Once you have created and saved this file, `git` will automatically ignore all the files and folders that match these patterns.
