@@ -1,19 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "AlchemyCV"
+name = "alchemycv"
 version = "1.0.0"
-description = "An advanced, all-in-one image processing and computer vision tool with a comprehensive GUI built in Python."
 authors = [
     { name = "Prashant Rawat", email = "prashantrawatmailbox@gmail.com" },
 ]
+description = "An advanced, all-in-one image processing and computer vision tool with a comprehensive GUI built in Python."
 readme = "README.md"
+license = { file="LICENSE" }
 requires-python = ">=3.8"
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+
+# These are the libraries your app needs to run
 dependencies = [
     "numpy",
-    "opencv-python",
+    "opencv-python-headless", # Use headless for packages to avoid GUI conflicts
     "Pillow",
-    "matplotlib",
+    "matplotlib"
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/kouya-marino/AlchemyCV"
 "Bug Tracker" = "https://github.com/kouya-marino/AlchemyCV/issues"
+
+# This creates the 'alchemycv' command to run your app
+[project.scripts]
+alchemycv = "alchemycv.app:main"
