@@ -1,0 +1,70 @@
+# --- Python Virtual Environments ---
+# Ignore the virtual environment folder itself
+venv/
+env/
+.venv/
+.env
+
+# --- Python cache and compiled files ---
+# This is the most common one to ignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- Distribution / packaging ---
+# These are created when you run "python -m build"
+build/
+dist/
+*.egg-info/
+sdist/
+wheelhouse/
+*.tar.gz
+
+# --- IDE and Editor configuration ---
+# Visual Studio Code
+.vscode/
+# PyCharm
+.idea/
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+# Vim
+*.swp
+
+# --- Operating System generated files ---
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- Testing ---
+# Coverage reports and pytest cache
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+
+# --- Logs ---
+# Any file ending in .log
+*.log
+
+# --- Secrets / Local configuration ---
+# Ignore local environment variables, but not the example template
+.env.*
+!/.env.example```
+
+### Why This is Important
+
+*   **Keeps Your Repository Clean:** It prevents temporary files (`__pycache__`, `build/`, `dist/`) from cluttering your project history.
+*   **Avoids Merge Conflicts:** IDE configuration files (`.idea/`, `.vscode/`) are often specific to your local machine and can cause conflicts when collaborating with others.
+*   **Improves Security:** It ensures you never accidentally commit sensitive information, like API keys, which might be stored in a `.env` file.
+*   **Reduces Repository Size:** It prevents large virtual environment folders from being uploaded, saving space and time when cloning the repository.
+
+Once you have created and saved this file, `git` will automatically ignore all the files and folders that match these patterns.
