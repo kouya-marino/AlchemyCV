@@ -4,6 +4,10 @@ import cv2
 import numpy as np
 from PIL import Image, ImageTk
 import json
+import sys
+import os
+import threading
+import time
 
 # Optional import for the Histogram feature
 try:
@@ -105,6 +109,15 @@ class AdvancedFilterApp:
         self.display_mode = tk.StringVar(value="Final Result")
         self.zoom_level_text = tk.StringVar(value="Zoom: 100%")
 
+        # --- Undo/Redo State ---
+        self.undo_stack = []
+        self.redo_stack = []
+        self.max_undo = 20
+        self._last_undo_time = 0
+
+        # --- Threading State ---
+        self._processing = False
+
         # --- Widget Storage ---
         self.preproc_param_widgets = []
         self.enhancement_param_widgets = []
@@ -117,6 +130,16 @@ class AdvancedFilterApp:
         self._create_widgets()
         self._initialize_ui_states()
         self.selected_filter.trace_add('write', self.on_filter_change)
+
+        # --- Keyboard Shortcuts ---
+        self.root.bind('<Control-o>', lambda e: self.open_image())
+        self.root.bind('<Control-s>', lambda e: self.save_image())
+        self.root.bind('<Control-z>', lambda e: self.undo())
+        self.root.bind('<Control-y>', lambda e: self.redo())
+        self.root.bind('<Control-0>', lambda e: self.fit_to_screen())
+        self.root.bind('<plus>', lambda e: self.zoom_in())
+        self.root.bind('<minus>', lambda e: self.zoom_out())
+        self.root.bind('<equal>', lambda e: self.zoom_in())
 
     def _create_widgets(self):
         main_pane = tk.PanedWindow(self.root, orient=tk.HORIZONTAL, sashrelief=tk.RAISED)
@@ -180,6 +203,11 @@ class AdvancedFilterApp:
         self.save_button.grid(row=0, column=1, sticky='ew', padx=2)
         ttk.Button(top_button_frame, text="Load Settings", command=self.load_settings).grid(row=0, column=2, sticky='ew', padx=2)
         ttk.Button(top_button_frame, text="Save Settings", command=self.save_settings).grid(row=0, column=3, sticky='ew', padx=(2, 0))
+
+        self.undo_button = ttk.Button(top_button_frame, text="Undo (Ctrl+Z)", command=self.undo, state='disabled')
+        self.undo_button.grid(row=1, column=0, columnspan=2, sticky='ew', padx=(0, 2), pady=(2, 0))
+        self.redo_button = ttk.Button(top_button_frame, text="Redo (Ctrl+Y)", command=self.redo, state='disabled')
+        self.redo_button.grid(row=1, column=2, columnspan=2, sticky='ew', padx=(2, 0), pady=(2, 0))
         
         self.reset_button = ttk.Button(controls_frame, text="Reset All to Defaults", command=self.reset_all_to_defaults, state='disabled')
         self.reset_button.pack(fill=tk.X, pady=(0, 10))
@@ -253,9 +281,9 @@ class AdvancedFilterApp:
         self.on_contour_toggle()
 
     def open_image(self):
-        filepath = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.png *.bmp"), ("All files", "*.*")])
+        filepath = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg *.jpeg *.png *.bmp *.tiff *.tif *.webp"), ("All files", "*.*")])
         if not filepath: return
-        self.original_cv_image = cv2.imread(filepath)
+        self.original_cv_image = cv2.imdecode(np.fromfile(filepath, dtype=np.uint8), cv2.IMREAD_COLOR)
         if self.original_cv_image is None: 
             messagebox.showerror("Error", f"Failed to open image: {filepath}")
             return
@@ -277,11 +305,10 @@ class AdvancedFilterApp:
         self.edge_enabled.set(False)
         self.selected_edge_filter.set(list(self.edge_detection_data.keys())[0])
         self.morph_enabled.set(False)
-        if 'Morph Operation' in self.param_vars:
-            self.param_vars['Morph Operation'].set('Dilate')
-            self.param_vars['Morph Kernel Shape'].set('Rectangle')
-            self.param_vars['Morph Kernel Size'].set(5)
-            self.param_vars['Morph Iterations'].set(1)
+        self.param_vars['Morph Operation'].set('Dilate')
+        self.param_vars['Morph Kernel Shape'].set('Rectangle')
+        self.param_vars['Morph Kernel Size'].set(5)
+        self.param_vars['Morph Iterations'].set(1)
         self.contours_enabled.set(False)
         self.draw_contours.set(True)
         self.contour_min_area.set(50)
@@ -306,12 +333,18 @@ class AdvancedFilterApp:
         self.show_spectrum_button.config(state=state)
         self.apply_filter()
 
+    def _set_widget_state(self, widget, state):
+        try:
+            widget.config(state=state)
+        except tk.TclError:
+            pass
+        for child in widget.winfo_children():
+            self._set_widget_state(child, state)
+
     def on_channel_viewer_toggle(self, event=None):
         is_enabled = self.channel_enabled.get()
         channel_state = 'normal' if is_enabled else 'disabled'
-        for child in self.channel_controls_container.winfo_children():
-            try: child.config(state=channel_state)
-            except tk.TclError: pass
+        self._set_widget_state(self.channel_controls_container, channel_state)
         self._update_filter_menu_states()
         
         current_filter_name = self.selected_filter.get()
@@ -348,28 +381,19 @@ class AdvancedFilterApp:
         edge_state = 'normal' if is_enabled else 'disabled'
         mask_gen_state = 'disabled' if is_enabled else 'normal'
 
-        for child in self.edge_controls_container.winfo_children():
-            try: child.config(state=edge_state)
-            except tk.TclError: pass
-            
-        for child in self.filter_frame.winfo_children():
-            try: child.config(state=mask_gen_state)
-            except tk.TclError: pass
-            
+        self._set_widget_state(self.edge_controls_container, edge_state)
+        self._set_widget_state(self.filter_frame, mask_gen_state)
+
         self.apply_filter()
         
     def on_morph_toggle(self):
         state = 'normal' if self.morph_enabled.get() else 'disabled'
-        for child in self.morph_controls_container.winfo_children():
-            try: child.config(state=state)
-            except tk.TclError: pass
+        self._set_widget_state(self.morph_controls_container, state)
         self.apply_filter()
 
     def on_contour_toggle(self):
         state = 'normal' if self.contours_enabled.get() else 'disabled'
-        for child in self.contour_controls_container.winfo_children():
-            try: child.config(state=state)
-            except tk.TclError: pass
+        self._set_widget_state(self.contour_controls_container, state)
         if not self.contours_enabled.get():
             self.object_count_text.set("Objects Found: --")
         self.apply_filter()
@@ -529,52 +553,157 @@ class AdvancedFilterApp:
         var = tk.IntVar(value=1); self.param_vars[p_name] = var
         slider, entry = self._create_slider_and_entry(frame, var, 1, 20); self.morph_param_widgets.extend([slider, entry])
 
+    def _capture_state(self):
+        state = {}
+        for var_name in dir(self):
+            var = getattr(self, var_name)
+            if isinstance(var, (tk.StringVar, tk.IntVar, tk.BooleanVar)):
+                try: state[('self', var_name)] = var.get()
+                except tk.TclError: pass
+        for key, var in self.param_vars.items():
+            try: state[('param', key)] = var.get()
+            except tk.TclError: pass
+        return state
+
+    def _restore_state(self, state):
+        for (kind, key), value in state.items():
+            try:
+                if kind == 'self':
+                    var = getattr(self, key, None)
+                    if isinstance(var, (tk.StringVar, tk.IntVar, tk.BooleanVar)):
+                        var.set(value)
+                elif kind == 'param':
+                    if key in self.param_vars:
+                        self.param_vars[key].set(value)
+            except tk.TclError:
+                pass
+        self._initialize_ui_states()
+
+    def _update_undo_buttons(self):
+        if hasattr(self, 'undo_button'):
+            self.undo_button.config(state='normal' if self.undo_stack else 'disabled')
+        if hasattr(self, 'redo_button'):
+            self.redo_button.config(state='normal' if self.redo_stack else 'disabled')
+
+    def undo(self):
+        if not self.undo_stack: return
+        self.redo_stack.append(self._capture_state())
+        state = self.undo_stack.pop()
+        self._restore_state(state)
+        self._update_undo_buttons()
+
+    def redo(self):
+        if not self.redo_stack: return
+        self.undo_stack.append(self._capture_state())
+        state = self.redo_stack.pop()
+        self._restore_state(state)
+        self._update_undo_buttons()
+
     def apply_filter(self, event=None):
         if self.original_cv_image is None: return
-        try:
-            preprocessed_image = self._process_preprocessing(self.original_cv_image)
-            enhanced_image = self._process_enhancement(preprocessed_image)
-            freq_filtered_image = self._process_frequency_filter(enhanced_image)
-            
-            image_for_masking = freq_filtered_image
-            extracted_channel = None
-            if self.channel_enabled.get():
-                image_for_masking = self._process_channel_extraction(freq_filtered_image)
-                extracted_channel = image_for_masking.copy()
-                if hasattr(self, 'channel_display_rb'): self.channel_display_rb.config(state='normal')
-            else:
-                if hasattr(self, 'channel_display_rb'): self.channel_display_rb.config(state='disabled')
+        if self._processing: return
 
-            if self.selected_enhancement.get() != 'None' or self.selected_frequency_filter.get() != 'None':
-                if hasattr(self, 'enhanced_display_rb'): self.enhanced_display_rb.config(state='normal')
-            else:
-                if hasattr(self, 'enhanced_display_rb'): self.enhanced_display_rb.config(state='disabled')
+        # Debounced undo state capture (500ms threshold)
+        now = time.time()
+        if now - self._last_undo_time > 0.5:
+            current_state = self._capture_state()
+            if not self.undo_stack or self.undo_stack[-1] != current_state:
+                self.undo_stack.append(current_state)
+                if len(self.undo_stack) > self.max_undo:
+                    self.undo_stack.pop(0)
+                self.redo_stack.clear()
+                self._update_undo_buttons()
+            self._last_undo_time = now
 
-            if self.edge_enabled.get():
-                gray_for_edge = cv2.cvtColor(enhanced_image, cv2.COLOR_BGR2GRAY) if len(enhanced_image.shape) == 3 else enhanced_image
-                mask = self._process_edge_detection(gray_for_edge)
-            else:
-                mask = self._process_mask_generation(image_for_masking)
-            
-            if mask is None: return
+        # Capture all tkinter vars on main thread (thread-safe)
+        params = {}
+        for k, v in self.param_vars.items():
+            try: params[k] = v.get()
+            except tk.TclError: pass
 
-            if self.morph_enabled.get():
-                mask = self._process_morph_ops(mask)
-            
-            final_image = cv2.bitwise_and(preprocessed_image, preprocessed_image, mask=mask)
-            if self.contours_enabled.get():
-                final_image = self._process_contours(mask, final_image.copy())
+        selectors = {
+            'preproc': self.selected_preproc.get(),
+            'enhancement': self.selected_enhancement.get(),
+            'frequency': self.selected_frequency_filter.get(),
+            'channel_enabled': self.channel_enabled.get(),
+            'color_space': self.selected_color_space.get(),
+            'channel': self.selected_channel.get(),
+            'filter': self.selected_filter.get(),
+            'edge_enabled': self.edge_enabled.get(),
+            'edge_filter': self.selected_edge_filter.get(),
+            'morph_enabled': self.morph_enabled.get(),
+            'contours_enabled': self.contours_enabled.get(),
+            'draw_contours': self.draw_contours.get(),
+            'min_area': self.contour_min_area.get(),
+            'max_area': self.contour_max_area.get(),
+            'display_mode': self.display_mode.get(),
+        }
 
-            mode = self.display_mode.get()
-            if mode == "Final Result": self.update_image_display(final_image)
-            elif mode == "Binary Mask": self.update_image_display(mask)
-            elif mode == "Enhanced Image": self.update_image_display(enhanced_image)
-            elif mode == "Pre-processed Image": self.update_image_display(preprocessed_image)
-            elif mode == "Extracted Channel" and extracted_channel is not None: self.update_image_display(extracted_channel)
-            else: self.update_image_display(final_image)
+        self._processing = True
 
-        except (tk.TclError, KeyError, ValueError, IndexError) as e:
-            pass
+        def _run():
+            try:
+                result = self._process_pipeline(selectors, params)
+                self.root.after(0, lambda: self._finish_processing(result, selectors))
+            except (tk.TclError, KeyError, ValueError, IndexError) as e:
+                print(f"Filter error: {e}", file=sys.stderr)
+                self.root.after(0, lambda: setattr(self, '_processing', False))
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _process_pipeline(self, sel, params):
+        preprocessed_image = self._process_preprocessing(self.original_cv_image)
+        enhanced_image = self._process_enhancement(preprocessed_image)
+        freq_filtered_image = self._process_frequency_filter(enhanced_image)
+
+        image_for_masking = freq_filtered_image
+        extracted_channel = None
+        if sel['channel_enabled']:
+            image_for_masking = self._process_channel_extraction(freq_filtered_image)
+            extracted_channel = image_for_masking.copy()
+
+        if sel['edge_enabled']:
+            edge_source = image_for_masking if sel['channel_enabled'] else freq_filtered_image
+            gray_for_edge = cv2.cvtColor(edge_source, cv2.COLOR_BGR2GRAY) if len(edge_source.shape) == 3 else edge_source
+            mask = self._process_edge_detection(gray_for_edge)
+        else:
+            mask = self._process_mask_generation(image_for_masking)
+
+        if mask is None: return None
+
+        if sel['morph_enabled']:
+            mask = self._process_morph_ops(mask)
+
+        final_image = cv2.bitwise_and(freq_filtered_image, freq_filtered_image, mask=mask)
+        if sel['contours_enabled']:
+            final_image = self._process_contours(mask, final_image.copy())
+
+        return {
+            'final': final_image, 'mask': mask, 'enhanced': enhanced_image,
+            'preprocessed': preprocessed_image, 'extracted_channel': extracted_channel,
+        }
+
+    def _finish_processing(self, result, sel):
+        self._processing = False
+        if result is None: return
+
+        if sel['channel_enabled']:
+            if hasattr(self, 'channel_display_rb'): self.channel_display_rb.config(state='normal')
+        else:
+            if hasattr(self, 'channel_display_rb'): self.channel_display_rb.config(state='disabled')
+
+        if sel['enhancement'] != 'None' or sel['frequency'] != 'None':
+            if hasattr(self, 'enhanced_display_rb'): self.enhanced_display_rb.config(state='normal')
+        else:
+            if hasattr(self, 'enhanced_display_rb'): self.enhanced_display_rb.config(state='disabled')
+
+        mode = sel['display_mode']
+        if mode == "Final Result": self.update_image_display(result['final'])
+        elif mode == "Binary Mask": self.update_image_display(result['mask'])
+        elif mode == "Enhanced Image": self.update_image_display(result['enhanced'])
+        elif mode == "Pre-processed Image": self.update_image_display(result['preprocessed'])
+        elif mode == "Extracted Channel" and result['extracted_channel'] is not None: self.update_image_display(result['extracted_channel'])
+        else: self.update_image_display(result['final'])
 
     def _process_preprocessing(self, image):
         preproc_type = self.selected_preproc.get()
@@ -687,28 +816,35 @@ class AdvancedFilterApp:
     def _create_frequency_filter_mask(self, shape, filter_type, D0, n=2):
         rows, cols = shape
         crow, ccol = rows // 2, cols // 2
-        mask = np.zeros((rows, cols), np.float32)
-        
-        for i in range(rows):
-            for j in range(cols):
-                D = np.sqrt((i - crow)**2 + (j - ccol)**2)
-                
-                if 'Low-Pass' in filter_type:
-                    if filter_type == 'Ideal Low-Pass':
-                        if D <= D0: mask[i, j] = 1
-                    elif filter_type == 'Gaussian Low-Pass':
-                        mask[i, j] = np.exp(-(D**2) / (2 * D0**2))
-                    elif filter_type == 'Butterworth Low-Pass':
-                        mask[i, j] = 1 / (1 + (D / D0)**(2*n))
-                
-                elif 'High-Pass' in filter_type:
-                    if filter_type == 'Ideal High-Pass':
-                        if D > D0: mask[i, j] = 1
-                    elif filter_type == 'Gaussian High-Pass':
-                        mask[i, j] = 1 - np.exp(-(D**2) / (2 * D0**2))
-                    elif filter_type == 'Butterworth High-Pass':
-                        if D != 0: mask[i, j] = 1 / (1 + (D0 / D)**(2*n))
-        return mask
+        u = np.arange(rows)
+        v = np.arange(cols)
+        V, U = np.meshgrid(v, u)
+        D = np.sqrt((U - crow)**2 + (V - ccol)**2).astype(np.float32)
+
+        if D0 == 0:
+            if 'Low-Pass' in filter_type:
+                return np.ones((rows, cols), np.float32)
+            else:
+                return np.zeros((rows, cols), np.float32)
+
+        if filter_type == 'Ideal Low-Pass':
+            mask = (D <= D0).astype(np.float32)
+        elif filter_type == 'Gaussian Low-Pass':
+            mask = np.exp(-(D**2) / (2 * D0**2))
+        elif filter_type == 'Butterworth Low-Pass':
+            mask = 1.0 / (1.0 + (D / D0)**(2*n))
+        elif filter_type == 'Ideal High-Pass':
+            mask = (D > D0).astype(np.float32)
+        elif filter_type == 'Gaussian High-Pass':
+            mask = 1.0 - np.exp(-(D**2) / (2 * D0**2))
+        elif filter_type == 'Butterworth High-Pass':
+            with np.errstate(divide='ignore', invalid='ignore'):
+                mask = 1.0 / (1.0 + (D0 / D)**(2*n))
+            mask[D == 0] = 0.0
+        else:
+            mask = np.ones((rows, cols), np.float32)
+
+        return mask.astype(np.float32)
 
     def _process_channel_extraction(self, image):
         space_name = self.selected_color_space.get()
@@ -763,8 +899,9 @@ class AdvancedFilterApp:
         else: h, w = image_for_masking.shape[:2]; return np.zeros((h, w), dtype=np.uint8)
 
     def _process_edge_detection(self, image_for_edge):
-        if 'edge_Kernel_Size' not in self.param_vars: return image_for_edge
         edge_type = self.selected_edge_filter.get()
+        guard_keys = {'Canny': 'edge_Threshold_1', 'Sobel': 'edge_Kernel_Size', 'Prewitt': 'edge_Direction', 'Roberts': 'edge_Direction'}
+        if guard_keys.get(edge_type, '') not in self.param_vars: return image_for_edge
         if edge_type == 'Canny':
             t1 = int(self.param_vars['edge_Threshold_1'].get()); t2 = int(self.param_vars['edge_Threshold_2'].get())
             return cv2.Canny(image_for_edge, t1, t2)
@@ -806,17 +943,18 @@ class AdvancedFilterApp:
         self.object_count_text.set(f"Objects Found: {len(filtered_contours)}")
         
         if self.draw_contours.get():
+            if image_to_draw_on.ndim == 2:
+                image_to_draw_on = cv2.cvtColor(image_to_draw_on, cv2.COLOR_GRAY2BGR)
             cv2.drawContours(image_to_draw_on, filtered_contours, -1, (0, 255, 0), 2)
-            
+
         return image_to_draw_on
 
     def _create_param_row(self, label1, label2=None, parent=None):
         if parent is None: parent = self.parameter_frame
         frame = ttk.Frame(parent); frame.pack(fill=tk.X, pady=2)
-        frame.columnconfigure(1, weight=1)
+        frame.columnconfigure((1, 4), weight=1)
         ttk.Label(frame, text=label1).grid(row=0, column=0, sticky='w', padx=5)
         if label2:
-            frame.columnconfigure(4, weight=1)
             ttk.Label(frame, text=label2).grid(row=0, column=3, padx=(10, 0), sticky='w')
         return frame
 
@@ -843,7 +981,8 @@ class AdvancedFilterApp:
 
         if new_w < 1 or new_h < 1: return
 
-        zoomed_img = cv2.resize(self.processed_cv_image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        interp = cv2.INTER_AREA if self.zoom_factor < 1.0 else cv2.INTER_LINEAR
+        zoomed_img = cv2.resize(self.processed_cv_image, (new_w, new_h), interpolation=interp)
 
         if len(zoomed_img.shape) == 2: rgb_image = cv2.cvtColor(zoomed_img, cv2.COLOR_GRAY2RGB)
         else: rgb_image = cv2.cvtColor(zoomed_img, cv2.COLOR_BGR2RGB)
@@ -886,15 +1025,20 @@ class AdvancedFilterApp:
         w_ratio = canvas_w / img_w
         h_ratio = canvas_h / img_h
         
-        self.zoom_factor = min(w_ratio, h_ratio, 1.0) 
+        self.zoom_factor = min(w_ratio, h_ratio)
         self.apply_filter()
 
     def save_image(self):
         if self.processed_cv_image is None: messagebox.showwarning("No Image", "There is no image to save."); return
-        filepath = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG Image", "*.png"), ("JPEG Image", "*.jpg"), ("BMP Image", "*.bmp"), ("All Files", "*.*")])
+        filepath = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG Image", "*.png"), ("JPEG Image", "*.jpg"), ("BMP Image", "*.bmp"), ("TIFF Image", "*.tiff"), ("WebP Image", "*.webp"), ("All Files", "*.*")])
         if not filepath: return
         try:
-            cv2.imwrite(filepath, self.processed_cv_image)
+            ext = os.path.splitext(filepath)[1]
+            result, encoded = cv2.imencode(ext, self.processed_cv_image)
+            if result:
+                encoded.tofile(filepath)
+            else:
+                raise IOError("Failed to encode image")
             messagebox.showinfo("Success", f"Image saved successfully to:\n{filepath}")
         except Exception as e: messagebox.showerror("Save Error", f"Could not save the image.\nError: {e}")
 
@@ -904,6 +1048,10 @@ class AdvancedFilterApp:
             var = getattr(self, var_name)
             if isinstance(var, (tk.StringVar, tk.IntVar, tk.BooleanVar)):
                 settings[var_name] = var.get()
+        param_vars_data = {}
+        for key, var in self.param_vars.items():
+            param_vars_data[key] = var.get()
+        settings['param_vars'] = param_vars_data
         filepath = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")])
         if not filepath: return
         try:
@@ -919,13 +1067,22 @@ class AdvancedFilterApp:
         except Exception as e: messagebox.showerror("Load Error", f"Could not load settings file.\nError: {e}"); return
         
         for var_name, value in settings.items():
+            if var_name == 'param_vars':
+                continue
             if hasattr(self, var_name):
                 var = getattr(self, var_name)
                 if isinstance(var, (tk.StringVar, tk.IntVar, tk.BooleanVar)):
                     try: var.set(value)
                     except tk.TclError: pass
-        
+
         self._initialize_ui_states()
+
+        if 'param_vars' in settings:
+            for key, value in settings['param_vars'].items():
+                if key in self.param_vars:
+                    try: self.param_vars[key].set(value)
+                    except tk.TclError: pass
+
         self.apply_filter()
 
     def show_histogram(self):
@@ -938,10 +1095,17 @@ class AdvancedFilterApp:
             freq_filtered = self._process_frequency_filter(enhanced)
             
             image_for_hist = freq_filtered
-            title = "Histogram of Frequency Filtered Image"
             if self.channel_enabled.get():
                 image_for_hist = self._process_channel_extraction(freq_filtered)
                 title = f"Histogram of '{self.selected_channel.get()}' Channel"
+            elif self.selected_frequency_filter.get() != 'None':
+                title = "Histogram of Frequency Filtered Image"
+            elif self.selected_enhancement.get() != 'None':
+                title = "Histogram of Enhanced Image"
+            elif self.selected_preproc.get() != 'None':
+                title = "Histogram of Pre-processed Image"
+            else:
+                title = "Histogram of Original Image"
 
             if image_for_hist.ndim == 3:
                 image_to_hist = cv2.cvtColor(image_for_hist, cv2.COLOR_BGR2GRAY)
@@ -979,7 +1143,7 @@ class AdvancedFilterApp:
             dft = cv2.dft(np.float32(padded), flags=cv2.DFT_COMPLEX_OUTPUT)
             dft_shift = np.fft.fftshift(dft)
             
-            magnitude_spectrum = 20 * np.log(cv2.magnitude(dft_shift[:, :, 0], dft_shift[:, :, 1]))
+            magnitude_spectrum = 20 * np.log1p(cv2.magnitude(dft_shift[:, :, 0], dft_shift[:, :, 1]))
             
             filter_type = self.selected_frequency_filter.get()
             D0 = self.param_vars.get('frequency_Cutoff_Freq_(D0)', tk.IntVar(value=30)).get()
