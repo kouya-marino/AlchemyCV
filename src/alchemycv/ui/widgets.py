@@ -38,8 +38,12 @@ def create_slider_and_entry(
             on_change()
 
     slider = ttk.Scale(
-        parent, from_=min_val, to=max_val, orient=tk.HORIZONTAL,
-        variable=variable, command=_on_slider,
+        parent,
+        from_=min_val,
+        to=max_val,
+        orient=tk.HORIZONTAL,
+        variable=variable,
+        command=_on_slider,
     )
     slider.grid(row=0, column=column_offset + 1, sticky="ew", padx=5)
 
@@ -81,7 +85,10 @@ def build_dynamic_panel(
         if "options" in p_data:
             var = tk.StringVar(value=p_data["default"])
             menu = ttk.OptionMenu(
-                frame, var, p_data["default"], *p_data["options"],
+                frame,
+                var,
+                p_data["default"],
+                *p_data["options"],
                 command=lambda _v: on_change() if on_change else None,
             )
             menu.grid(row=0, column=1, sticky="ew")
@@ -89,7 +96,10 @@ def build_dynamic_panel(
         else:
             var = tk.IntVar(value=p_data["default"])
             slider, entry = create_slider_and_entry(
-                frame, var, p_data["range"][0], p_data["range"][1],
+                frame,
+                var,
+                p_data["range"][0],
+                p_data["range"][1],
                 on_change=on_change,
             )
             widget_list.extend([slider, entry])

@@ -12,7 +12,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from . import preprocessing, enhancement, frequency, channels, masking, edges, morphology, contours
+from . import channels, contours, edges, enhancement, frequency, masking, morphology, preprocessing
 
 log = logging.getLogger(__name__)
 
@@ -43,9 +43,7 @@ def run(
     extracted_channel = None
 
     if sel["channel_enabled"]:
-        image_for_masking = channels.process(
-            freq_filtered_image, sel["color_space"], sel["channel"]
-        )
+        image_for_masking = channels.process(freq_filtered_image, sel["color_space"], sel["channel"])
         extracted_channel = image_for_masking.copy()
 
     otsu_threshold = None

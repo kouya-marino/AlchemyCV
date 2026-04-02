@@ -57,9 +57,11 @@ def process(image: np.ndarray, edge_name: str, params: dict[str, Any]) -> np.nda
 
 def _sobel_factory(ksize: int):
     """Return a callable ``(image, axis) -> gradient`` for Sobel."""
+
     def _apply(img: np.ndarray, axis: str) -> np.ndarray:
         dx, dy = (1, 0) if axis == "X" else (0, 1)
         return cv2.Sobel(img, cv2.CV_64F, dx, dy, ksize=ksize)
+
     return _apply
 
 
@@ -71,4 +73,4 @@ def _directional_filter(image: np.ndarray, direction: str, grad_fn) -> np.ndarra
     # Magnitude
     gx = grad_fn(image, "X").astype(np.float64)
     gy = grad_fn(image, "Y").astype(np.float64)
-    return cv2.convertScaleAbs(np.sqrt(gx ** 2 + gy ** 2))
+    return cv2.convertScaleAbs(np.sqrt(gx**2 + gy**2))

@@ -22,6 +22,7 @@ from .widgets import build_dynamic_panel, create_param_row, create_slider_and_en
 # Check matplotlib availability once
 try:
     from matplotlib.figure import Figure  # noqa: F401
+
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
@@ -92,14 +93,10 @@ class ControlPanel:
         top.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
         top.columnconfigure((0, 1, 2, 3), weight=1)
 
-        ttk.Button(top, text="Open Image", command=self.app.open_image).grid(
-            row=0, column=0, sticky="ew", padx=(0, 2)
-        )
+        ttk.Button(top, text="Open Image", command=self.app.open_image).grid(row=0, column=0, sticky="ew", padx=(0, 2))
         self.save_button = ttk.Button(top, text="Save Image", command=self.app.save_image, state="disabled")
         self.save_button.grid(row=0, column=1, sticky="ew", padx=2)
-        ttk.Button(top, text="Load Settings", command=self.app.load_settings).grid(
-            row=0, column=2, sticky="ew", padx=2
-        )
+        ttk.Button(top, text="Load Settings", command=self.app.load_settings).grid(row=0, column=2, sticky="ew", padx=2)
         ttk.Button(top, text="Save Settings", command=self.app.save_settings).grid(
             row=0, column=3, sticky="ew", padx=(2, 0)
         )
@@ -118,8 +115,11 @@ class ControlPanel:
         frame = ttk.LabelFrame(parent, text="1. Pre-processing", padding="10")
         frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
         ttk.OptionMenu(
-            frame, self.app.selected_preproc, self.app.selected_preproc.get(),
-            *PREPROCESSING_DATA.keys(), command=self.on_preproc_change,
+            frame,
+            self.app.selected_preproc,
+            self.app.selected_preproc.get(),
+            *PREPROCESSING_DATA.keys(),
+            command=self.on_preproc_change,
         ).pack(fill=tk.X)
         self.preproc_parameter_frame = ttk.Frame(frame, padding=(0, 10, 0, 0))
         self.preproc_parameter_frame.pack(fill=tk.X)
@@ -128,8 +128,11 @@ class ControlPanel:
         frame = ttk.LabelFrame(parent, text="2. Image Enhancement", padding="10")
         frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
         ttk.OptionMenu(
-            frame, self.app.selected_enhancement, self.app.selected_enhancement.get(),
-            *ENHANCEMENT_DATA.keys(), command=self.on_enhancement_change,
+            frame,
+            self.app.selected_enhancement,
+            self.app.selected_enhancement.get(),
+            *ENHANCEMENT_DATA.keys(),
+            command=self.on_enhancement_change,
         ).pack(fill=tk.X)
         self.enhancement_parameter_frame = ttk.Frame(frame, padding=(0, 10, 0, 0))
         self.enhancement_parameter_frame.pack(fill=tk.X)
@@ -138,8 +141,11 @@ class ControlPanel:
         frame = ttk.LabelFrame(parent, text="3. Frequency Domain Filters", padding="10")
         frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
         ttk.OptionMenu(
-            frame, self.app.selected_frequency_filter, self.app.selected_frequency_filter.get(),
-            *FREQUENCY_DATA.keys(), command=self.on_frequency_filter_change,
+            frame,
+            self.app.selected_frequency_filter,
+            self.app.selected_frequency_filter.get(),
+            *FREQUENCY_DATA.keys(),
+            command=self.on_frequency_filter_change,
         ).pack(fill=tk.X)
         self.frequency_parameter_frame = ttk.Frame(frame, padding=(0, 10, 0, 0))
         self.frequency_parameter_frame.pack(fill=tk.X)
@@ -151,7 +157,9 @@ class ControlPanel:
     def _build_channel_extractor(self, parent: ttk.Frame) -> None:
         frame = ttk.LabelFrame(parent, text="4. Channel Extractor", padding="10")
         frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
-        ttk.Checkbutton(frame, text="Enable", variable=self.app.channel_enabled, command=self.on_channel_viewer_toggle).pack(anchor="w")
+        ttk.Checkbutton(
+            frame, text="Enable", variable=self.app.channel_enabled, command=self.on_channel_viewer_toggle
+        ).pack(anchor="w")
         self.channel_controls_container = ttk.Frame(frame)
         self.channel_controls_container.pack(fill=tk.X, pady=5)
         self._create_channel_controls()
@@ -159,8 +167,11 @@ class ControlPanel:
     def _create_channel_controls(self) -> None:
         frame1 = create_param_row("Color Space", parent=self.channel_controls_container)
         space_menu = ttk.OptionMenu(
-            frame1, self.app.selected_color_space, self.app.selected_color_space.get(),
-            *CHANNEL_DATA.keys(), command=self.on_color_space_change,
+            frame1,
+            self.app.selected_color_space,
+            self.app.selected_color_space.get(),
+            *CHANNEL_DATA.keys(),
+            command=self.on_color_space_change,
         )
         space_menu.grid(row=0, column=1, sticky="ew")
 
@@ -171,7 +182,9 @@ class ControlPanel:
     def _build_mask_generation(self, parent: ttk.Frame) -> None:
         self.filter_frame = ttk.LabelFrame(parent, text="5. Mask Generation", padding="10")
         self.filter_frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
-        self.filter_menubutton = ttk.Menubutton(self.filter_frame, textvariable=self.app.selected_filter, direction="flush")
+        self.filter_menubutton = ttk.Menubutton(
+            self.filter_frame, textvariable=self.app.selected_filter, direction="flush"
+        )
         filter_menu = tk.Menu(self.filter_menubutton, tearoff=False)
         for name in FILTER_DATA.keys():
             filter_menu.add_radiobutton(label=name, variable=self.app.selected_filter)
@@ -187,12 +200,17 @@ class ControlPanel:
         # Edge detection
         edge_frame = ttk.LabelFrame(self.refinement_frame, text="Edge Detection (Overrides Mask Generation)", padding=5)
         edge_frame.pack(fill=tk.X, pady=5)
-        ttk.Checkbutton(edge_frame, text="Enable", variable=self.app.edge_enabled, command=self.on_edge_toggle).pack(anchor="w")
+        ttk.Checkbutton(edge_frame, text="Enable", variable=self.app.edge_enabled, command=self.on_edge_toggle).pack(
+            anchor="w"
+        )
         self.edge_controls_container = ttk.Frame(edge_frame)
         self.edge_controls_container.pack(fill=tk.X)
         ttk.OptionMenu(
-            self.edge_controls_container, self.app.selected_edge_filter, self.app.selected_edge_filter.get(),
-            *EDGE_DETECTION_DATA.keys(), command=self.on_edge_filter_change,
+            self.edge_controls_container,
+            self.app.selected_edge_filter,
+            self.app.selected_edge_filter.get(),
+            *EDGE_DETECTION_DATA.keys(),
+            command=self.on_edge_filter_change,
         ).pack(fill=tk.X, pady=(5, 0))
         self.edge_parameter_frame = ttk.Frame(self.edge_controls_container, padding=(0, 10, 0, 0))
         self.edge_parameter_frame.pack(fill=tk.X)
@@ -200,7 +218,9 @@ class ControlPanel:
         # Morphological operations
         morph_frame = ttk.LabelFrame(self.refinement_frame, text="Morphological Operations", padding=5)
         morph_frame.pack(fill=tk.X, pady=5)
-        ttk.Checkbutton(morph_frame, text="Enable", variable=self.app.morph_enabled, command=self.on_morph_toggle).pack(anchor="w")
+        ttk.Checkbutton(morph_frame, text="Enable", variable=self.app.morph_enabled, command=self.on_morph_toggle).pack(
+            anchor="w"
+        )
         self.morph_controls_container = ttk.Frame(morph_frame)
         self.morph_controls_container.pack(fill=tk.X)
         self._create_morph_controls()
@@ -241,13 +261,17 @@ class ControlPanel:
     def _build_contour_analysis(self, parent: ttk.Frame) -> None:
         frame = ttk.LabelFrame(parent, text="7. Contour Analysis", padding="10")
         frame.pack(side=tk.TOP, fill=tk.X, pady=(0, 10))
-        ttk.Checkbutton(frame, text="Enable", variable=self.app.contours_enabled, command=self.on_contour_toggle).pack(anchor="w")
+        ttk.Checkbutton(frame, text="Enable", variable=self.app.contours_enabled, command=self.on_contour_toggle).pack(
+            anchor="w"
+        )
         self.contour_controls_container = ttk.Frame(frame)
         self.contour_controls_container.pack(fill=tk.X)
 
         ttk.Checkbutton(
-            self.contour_controls_container, text="Draw Contours on Image",
-            variable=self.app.draw_contours, command=self._apply,
+            self.contour_controls_container,
+            text="Draw Contours on Image",
+            variable=self.app.draw_contours,
+            command=self._apply,
         ).pack(anchor="w", pady=(5, 0))
 
         min_frame = create_param_row("Min Area", parent=self.contour_controls_container)
@@ -257,7 +281,8 @@ class ControlPanel:
         create_slider_and_entry(max_frame, self.app.contour_max_area, 0, 1000000, on_change=self._apply)
 
         ttk.Label(
-            self.contour_controls_container, textvariable=self.app.object_count_text,
+            self.contour_controls_container,
+            textvariable=self.app.object_count_text,
             font=("Helvetica", 10, "bold"),
         ).pack(pady=5)
 
@@ -284,25 +309,37 @@ class ControlPanel:
 
     def on_preproc_change(self, _event: Any = None) -> None:
         build_dynamic_panel(
-            PREPROCESSING_DATA, self.app.selected_preproc.get(),
-            self.preproc_parameter_frame, self.preproc_param_widgets,
-            self.app.param_vars, "preproc", on_change=self._apply,
+            PREPROCESSING_DATA,
+            self.app.selected_preproc.get(),
+            self.preproc_parameter_frame,
+            self.preproc_param_widgets,
+            self.app.param_vars,
+            "preproc",
+            on_change=self._apply,
         )
         self._apply()
 
     def on_enhancement_change(self, _event: Any = None) -> None:
         build_dynamic_panel(
-            ENHANCEMENT_DATA, self.app.selected_enhancement.get(),
-            self.enhancement_parameter_frame, self.enhancement_param_widgets,
-            self.app.param_vars, "enhancement", on_change=self._apply,
+            ENHANCEMENT_DATA,
+            self.app.selected_enhancement.get(),
+            self.enhancement_parameter_frame,
+            self.enhancement_param_widgets,
+            self.app.param_vars,
+            "enhancement",
+            on_change=self._apply,
         )
         self._apply()
 
     def on_frequency_filter_change(self, _event: Any = None) -> None:
         build_dynamic_panel(
-            FREQUENCY_DATA, self.app.selected_frequency_filter.get(),
-            self.frequency_parameter_frame, self.frequency_param_widgets,
-            self.app.param_vars, "frequency", on_change=self._apply,
+            FREQUENCY_DATA,
+            self.app.selected_frequency_filter.get(),
+            self.frequency_parameter_frame,
+            self.frequency_param_widgets,
+            self.app.param_vars,
+            "frequency",
+            on_change=self._apply,
         )
         state = "normal" if self.app.selected_frequency_filter.get() != "None" else "disabled"
         self.show_spectrum_button.config(state=state)
@@ -343,9 +380,13 @@ class ControlPanel:
 
     def on_edge_filter_change(self, _event: Any = None) -> None:
         build_dynamic_panel(
-            EDGE_DETECTION_DATA, self.app.selected_edge_filter.get(),
-            self.edge_parameter_frame, self.edge_param_widgets,
-            self.app.param_vars, "edge", on_change=self._apply,
+            EDGE_DETECTION_DATA,
+            self.app.selected_edge_filter.get(),
+            self.edge_parameter_frame,
+            self.edge_param_widgets,
+            self.app.param_vars,
+            "edge",
+            on_change=self._apply,
         )
         self._apply()
 
@@ -430,7 +471,9 @@ class ControlPanel:
                 self.param_widgets.extend([s1, e1])
                 max_var = tk.IntVar(value=max_val)
                 pv[f"color_{channel}_max"] = max_var
-                s2, e2 = create_slider_and_entry(frame, max_var, min_val, max_val, on_change=self._apply, column_offset=3)
+                s2, e2 = create_slider_and_entry(
+                    frame, max_var, min_val, max_val, on_change=self._apply, column_offset=3
+                )
                 self.param_widgets.extend([s2, e2])
 
         elif config.get("type") == "otsu":
@@ -454,9 +497,13 @@ class ControlPanel:
 
         else:
             build_dynamic_panel(
-                FILTER_DATA, self.app.selected_filter.get(),
-                self.parameter_frame, self.param_widgets,
-                pv, "filter", on_change=self._apply,
+                FILTER_DATA,
+                self.app.selected_filter.get(),
+                self.parameter_frame,
+                self.param_widgets,
+                pv,
+                "filter",
+                on_change=self._apply,
             )
 
     def _on_mousewheel(self, event: tk.Event) -> None:
