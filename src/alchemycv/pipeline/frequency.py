@@ -21,8 +21,7 @@ def process(image: np.ndarray, filter_name: str, params: dict[str, Any]) -> np.n
     rows, cols = gray.shape
     m_rows = cv2.getOptimalDFTSize(rows)
     m_cols = cv2.getOptimalDFTSize(cols)
-    padded = cv2.copyMakeBorder(gray, 0, m_rows - rows, 0, m_cols - cols,
-                                cv2.BORDER_CONSTANT, value=0)
+    padded = cv2.copyMakeBorder(gray, 0, m_rows - rows, 0, m_cols - cols, cv2.BORDER_CONSTANT, value=0)
 
     planes = [np.float32(padded), np.zeros(padded.shape, np.float32)]
     complex_i = cv2.merge(planes)
@@ -71,13 +70,13 @@ def create_filter_mask(
     if filter_type == "Ideal Low-Pass":
         mask = (D <= D0).astype(np.float32)
     elif filter_type == "Gaussian Low-Pass":
-        mask = np.exp(-(D ** 2) / (2 * D0 ** 2))
+        mask = np.exp(-(D**2) / (2 * D0**2))
     elif filter_type == "Butterworth Low-Pass":
         mask = 1.0 / (1.0 + (D / D0) ** (2 * n))
     elif filter_type == "Ideal High-Pass":
         mask = (D > D0).astype(np.float32)
     elif filter_type == "Gaussian High-Pass":
-        mask = 1.0 - np.exp(-(D ** 2) / (2 * D0 ** 2))
+        mask = 1.0 - np.exp(-(D**2) / (2 * D0**2))
     elif filter_type == "Butterworth High-Pass":
         with np.errstate(divide="ignore", invalid="ignore"):
             mask = 1.0 / (1.0 + (D0 / D) ** (2 * n))

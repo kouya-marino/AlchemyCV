@@ -65,6 +65,7 @@ def process(image: np.ndarray, enhance_name: str, params: dict[str, Any]) -> np.
 # Internal implementations
 # ------------------------------------------------------------------
 
+
 def _hist_equalize(image: np.ndarray) -> np.ndarray:
     if len(image.shape) == 2:
         return cv2.equalizeHist(image)
@@ -86,9 +87,7 @@ def _gamma_correction(image: np.ndarray, gamma: float) -> np.ndarray:
     if gamma <= 0:
         gamma = 0.01
     inv_gamma = 1.0 / gamma
-    table = np.array(
-        [((i / 255.0) ** inv_gamma) * 255 for i in range(256)]
-    ).astype("uint8")
+    table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)]).astype("uint8")
     return cv2.LUT(image, table)
 
 

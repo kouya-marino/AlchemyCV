@@ -10,8 +10,11 @@ import logging
 import sys
 import threading
 import tkinter as tk
-from tkinter import filedialog, ttk, messagebox
+from tkinter import filedialog, messagebox, ttk
 from typing import Any
+
+import cv2
+import numpy as np
 
 from .constants import (
     CHANNEL_DATA,
@@ -22,24 +25,22 @@ from .constants import (
 )
 from .pipeline import engine as pipeline_engine
 from .pipeline.frequency import create_filter_mask
-from .state.manager import UndoManager
 from .state import settings as settings_io
+from .state.manager import UndoManager
 from .ui.canvas import ImageCanvas
 from .ui.control_panel import ControlPanel
 from .utils import load_image, save_image
 
 # Optional matplotlib
 try:
-    from matplotlib.figure import Figure
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    from matplotlib.figure import Figure
+
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
 log = logging.getLogger(__name__)
-
-import cv2
-import numpy as np
 
 
 class AdvancedFilterApp:
@@ -282,9 +283,7 @@ class AdvancedFilterApp:
 
         # Update display-mode radio button states
         if hasattr(self.controls, "channel_display_rb"):
-            self.controls.channel_display_rb.config(
-                state="normal" if sel["channel_enabled"] else "disabled"
-            )
+            self.controls.channel_display_rb.config(state="normal" if sel["channel_enabled"] else "disabled")
         if hasattr(self.controls, "enhanced_display_rb"):
             self.controls.enhanced_display_rb.config(
                 state="normal" if sel["enhancement"] != "None" or sel["frequency"] != "None" else "disabled"
@@ -325,7 +324,7 @@ class AdvancedFilterApp:
             messagebox.showwarning("No Image", "Open an image first.")
             return
         try:
-            from .pipeline import preprocessing, enhancement, frequency, channels
+            from .pipeline import channels, enhancement, frequency, preprocessing
 
             params: dict[str, Any] = {}
             for k, v in self.param_vars.items():
@@ -379,7 +378,7 @@ class AdvancedFilterApp:
             messagebox.showwarning("No Image", "Open an image first.")
             return
         try:
-            from .pipeline import preprocessing, enhancement
+            from .pipeline import enhancement, preprocessing
 
             params: dict[str, Any] = {}
             for k, v in self.param_vars.items():

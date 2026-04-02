@@ -46,11 +46,7 @@ def process(
 
     if filter_type == "adaptive_thresh":
         method_str = params.get("filter_Adaptive_Method", "Gaussian C")
-        method = (
-            cv2.ADAPTIVE_THRESH_MEAN_C
-            if method_str == "Mean C"
-            else cv2.ADAPTIVE_THRESH_GAUSSIAN_C
-        )
+        method = cv2.ADAPTIVE_THRESH_MEAN_C if method_str == "Mean C" else cv2.ADAPTIVE_THRESH_GAUSSIAN_C
         type_str = params.get("filter_Threshold_Type", "Binary")
         thresh_type = cv2.THRESH_BINARY if type_str == "Binary" else cv2.THRESH_BINARY_INV
         bsize = _ensure_odd(int(params.get("filter_Block_Size", 11)))
