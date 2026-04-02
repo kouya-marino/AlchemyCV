@@ -1,209 +1,150 @@
 # AlchemyCV — Improvement & Future Plan
 
-> **Version:** 1.0.0 | **Date:** 2026-04-03
-> **Current state:** Monolithic single-file app (`app.py`, 1191 lines, 50+ methods in one class)
+> **Version:** 1.0.0 | **Last updated:** 2026-04-03
 > **Stack:** Python 3.8+ / Tkinter / OpenCV / NumPy / Pillow / Matplotlib
 
 ---
 
-## Phase 1: Code Quality & Foundation
+## Completed
 
-**Goal:** Make the codebase testable, maintainable, and contributor-friendly.
+### Phase 1: Code Quality & Foundation ✅
 
-### 1.1 Modularize `app.py`
-
-Split the monolithic `AdvancedFilterApp` class into focused modules:
+Modularized the 1191-line monolithic `app.py` into 17 focused modules across 4 packages:
 
 ```
-src/alchemycv/
-├── app.py                  # Entry point, window setup, main loop
-├── ui/
-│   ├── main_window.py      # Top-level layout, menu bar, toolbar
-│   ├── control_panel.py    # Left panel with all filter controls
-│   ├── canvas.py           # Image canvas, zoom, pan, display
-│   └── widgets.py          # Reusable slider+entry, dynamic panels
-├── pipeline/
-│   ├── engine.py           # Pipeline orchestrator (runs stages in order)
-│   ├── preprocessing.py    # Gaussian, Median, Bilateral blur
-│   ├── enhancement.py      # CLAHE, Gamma, Retinex, Unsharp, etc.
-│   ├── frequency.py        # DFT-based LPF/HPF filters
-│   ├── channels.py         # Color space conversion, channel extraction
-│   ├── masking.py          # Color range, grayscale range, adaptive, Otsu
-│   ├── edges.py            # Canny, Sobel, Prewitt, Roberts
-│   ├── morphology.py       # Dilate, Erode, Open, Close, etc.
-│   └── contours.py         # Contour detection, area filtering, drawing
+src/alchemycv/              (~2,230 lines total)
+├── app.py                  (446 lines — thin orchestrator)
+├── constants.py            (259 lines — centralized filter data, lookup maps)
+├── utils.py                (33 lines — Unicode-safe image I/O)
+├── pipeline/               (pure functions, zero tkinter imports)
+│   ├── engine.py           preprocessing.py   enhancement.py
+│   ├── frequency.py        channels.py        masking.py
+│   ├── edges.py            morphology.py      contours.py
 ├── state/
-│   ├── manager.py          # Undo/redo stack, state capture/restore
-│   └── settings.py         # Save/load JSON settings, session persistence
-└── utils.py                # Image I/O (Unicode paths), format helpers
+│   ├── manager.py          (UndoManager — capture/restore/undo/redo)
+│   └── settings.py         (JSON save/load)
+└── ui/
+    ├── control_panel.py    canvas.py          widgets.py
 ```
 
-**Why:** The current single-class design makes it impossible to unit-test filters independently, reuse processing logic outside the GUI, or onboard new contributors without understanding 1200 lines at once.
+What was delivered:
+- Pipeline functions decoupled from UI — accept `np.ndarray` + `dict`, return `np.ndarray`
+- Type hints on all public functions
+- `logging` module replaces `print(stderr)`
+- Constants consolidated in `constants.py` (filter data, morph maps, color conv maps)
+- `_ensure_odd()` validation in every module needing odd kernel sizes
 
-### 1.2 Decouple Processing from UI
+### Phase 2: Testing & CI/CD ✅
 
-- Processing functions should accept NumPy arrays + parameter dicts, return NumPy arrays
-- No tkinter imports in `pipeline/` modules
-- UI reads parameters from widgets, passes plain dicts to pipeline
-- Enables headless/CLI usage and testing without a display
-
-### 1.3 Add Type Hints
-
-- Add type annotations to all public methods and function signatures
-- Use `numpy.typing.NDArray` for image parameters
-- Add `py.typed` marker for downstream consumers
-
-### 1.4 Replace `print()` with `logging`
-
-- Use Python `logging` module with configurable levels
-- `DEBUG` for filter parameter values, `INFO` for pipeline stages, `WARNING` for fallbacks, `ERROR` for failures
-
-### 1.5 Fix Hardcoded Magic Strings
-
-- Define filter names, color spaces, and parameter keys as constants or enums
-- Example: `class FilterType(Enum): GAUSSIAN_BLUR = "Gaussian Blur"` etc.
-- Eliminates silent bugs from typos in string comparisons
-
-### 1.6 Input Validation
-
-- Enforce odd kernel sizes before passing to OpenCV (currently causes crashes)
-- Validate min < max for contour area ranges
-- Clamp parameter values to valid ranges in entry widgets
-- Show user-friendly error messages instead of silent failures
-
----
-
-## Phase 2: Testing & CI/CD
-
-**Goal:** Automated quality gates to catch regressions.
-
-### 2.1 Unit Tests (pytest)
-
-- Test each processing function in isolation (input image + params -> expected output)
-- Snapshot tests: compare filter outputs against reference images (pixel tolerance)
-- State management tests: capture, restore, undo, redo cycles
-- Settings serialization round-trip tests
-
-### 2.2 Integration Tests
-
-- Full pipeline tests: load image -> apply filters -> verify output dimensions/channels
-- Edge cases: empty image, single-pixel image, very large image, corrupted file
-- Parameter boundary tests: min/max values for every slider
-
-### 2.3 CI Pipeline (GitHub Actions)
-
-```yaml
-# .github/workflows/ci.yml
-on: [push, pull_request]
-jobs:
-  lint:    ruff check + ruff format --check
-  type:    mypy --strict src/
-  test:    pytest --cov=alchemycv -x
-  build:   pip install . && alchemycv --version
-```
-
-### 2.4 Automated PyPI Publishing
-
-- GitHub Actions workflow triggered on version tags (`v*.*.*`)
-- Build sdist + wheel, publish to PyPI
-- Auto-generate release notes from commit history
+- **140 pytest tests** across 11 test modules — all passing
+- Coverage: pipeline modules 97-100%, state 83-89%, utils 91%
+- **CI pipeline** (`.github/workflows/ci.yml`): ruff lint/format + pytest on Python 3.9/3.11/3.12 + build verification
+- **PyPI publishing** (`.github/workflows/publish.yml`): triggered on `v*.*.*` tags, trusted OIDC publishing
+- Dev dependencies: `pytest`, `pytest-cov`, `ruff` in `[project.optional-dependencies]`
+- All code passes `ruff check` + `ruff format`
 
 ---
 
 ## Phase 3: UX Improvements
 
-**Goal:** Make the app more intuitive and responsive.
+**Goal:** Make the app more intuitive, responsive, and visually polished.
 
 ### 3.1 Tooltips
 
 - Add hover tooltips to every filter parameter explaining what it does
-- Example: "Sigma Color — Higher values mix colors from farther pixels (range: 1-150)"
+- Example: *"Sigma Color — Higher values mix colors from farther pixels (1-150)"*
+- Implement a reusable `ToolTip` widget class in `ui/widgets.py`
 
 ### 3.2 Per-Stage Reset Buttons
 
-- "Reset" button on each LabelFrame to reset only that stage's parameters
-- Currently only "Reset All" exists, which is too destructive
+- Add a "Reset" button to each LabelFrame (stages 1-7)
+- Resets only that stage's parameters to defaults
+- Currently only "Reset All" exists, which is too destructive for exploration
 
 ### 3.3 Progress Indicator
 
-- Show a progress bar or spinner during heavy operations (FFT on large images)
-- Replace the bare `_processing` flag with proper feedback
+- Show a progress bar or spinner in the status area during heavy operations
+- Especially useful for FFT on large images and batch processing (Phase 4)
+- Replace the bare `_processing` boolean flag with visual feedback
 
 ### 3.4 Before/After Comparison
 
-- Split-view mode: drag a divider to compare original vs. processed
-- Toggle with keyboard shortcut (e.g., `Space` to flip between original and result)
+- Split-view mode: vertical divider to compare original vs. processed side-by-side
+- Quick toggle: `Space` key to flip between original and current result
+- Useful for fine-tuning enhancement parameters
 
 ### 3.5 Dark Mode
 
-- Add a dark theme option using ttk styles
-- Persist theme preference in settings
+- Add a dark theme using custom ttk styles
+- Toggle via menu or keyboard shortcut
+- Persist preference in settings JSON
 
 ### 3.6 Better Zoom & Pan
 
-- Zoom to mouse cursor position (not center)
-- Minimap/navigator for large zoomed-in images
-- Pixel-level inspector on hover (show RGB values)
+- Zoom centered on mouse cursor position (not canvas center)
+- Pixel inspector on hover — show RGB/HSV values at cursor in status bar
+- Optional minimap/navigator overlay for large zoomed-in images
+
+### 3.7 Keyboard Shortcuts Guide
+
+- Add Help > Keyboard Shortcuts dialog listing all bindings
+- Consider adding customizable shortcut support
 
 ---
 
 ## Phase 4: New Features
 
-**Goal:** Expand capabilities beyond current filter set.
+**Goal:** Expand capabilities beyond the current filter set.
 
 ### 4.1 Batch Processing
 
-- Apply current pipeline configuration to an entire folder of images
-- Output naming patterns (e.g., `{original}_processed.png`)
+- Apply current pipeline to an entire folder of images
+- Output naming: `{original}_processed.{ext}`
 - Progress bar with cancel support
-- CLI interface: `alchemycv --batch --input ./photos --output ./results --config pipeline.json`
+- CLI mode: `alchemycv --batch --input ./photos --output ./results --config pipeline.json`
+- Leverages the decoupled pipeline — no UI needed for headless batch
 
-### 4.2 Video Support
-
-- Open video files (mp4, avi, mkv) and process frame-by-frame
-- Live webcam feed with real-time filter application
-- Export processed video with codec selection
-- Frame scrubber to preview specific frames before full export
-
-### 4.3 More Filters & Algorithms
-
-**Segmentation:**
-- Watershed segmentation
-- GrabCut (interactive foreground extraction)
-- K-means color clustering
+### 4.2 More Filters & Algorithms
 
 **Denoising:**
 - Non-local means denoising (`cv2.fastNlMeansDenoisingColored`)
-- Wiener filter
+- Bilateral denoising with guided filter
+
+**Segmentation:**
+- Watershed segmentation with marker-based seeds
+- GrabCut (interactive foreground extraction)
+- K-means color clustering with configurable K
 
 **Feature Detection:**
-- Harris corner detection with visualization
-- ORB / SIFT keypoint detection and matching
+- Harris corner detection with visualization overlay
+- ORB keypoint detection with descriptor matching
 - Hough line and circle detection
 
-**AI-Powered (Optional, via OpenCV DNN or ONNX):**
-- Background removal (U2-Net or similar lightweight model)
-- Super-resolution (ESPCN, FSRCNN)
-- Style transfer
+**Sharpening:**
+- Laplacian sharpening
+- High-boost filtering
 
-### 4.4 Region of Interest (ROI)
+### 4.3 Region of Interest (ROI)
 
-- Draw rectangles, polygons, or freehand regions on the image
-- Apply filters only within selected ROI
-- Multiple ROI support with different filter configurations
+- Draw rectangles or polygons directly on the canvas
+- Apply the pipeline only within selected regions
+- Multiple ROI support with independent filter configs
+- ROI saved/loaded as part of settings JSON
 
-### 4.5 Layer System
+### 4.4 Histogram & Levels Tools
 
-- Stack multiple filter configurations as layers
-- Blend modes between layers (multiply, screen, overlay, etc.)
-- Opacity control per layer
-- Reorder layers via drag-and-drop
+- Live histogram overlay on the canvas (toggle on/off)
+- Per-channel (R/G/B) histogram with adjustable curves
+- Levels adjustment: black point, white point, midtone gamma
+- These build on the existing `show_histogram()` feature
 
-### 4.6 Histogram Tools
+### 4.5 Video Support
 
-- Live histogram overlay on the image canvas
-- Per-channel histogram with adjustable curves
-- Levels adjustment (black point, white point, midtones)
+- Open video files (mp4, avi, mkv) via `cv2.VideoCapture`
+- Process frame-by-frame with the current pipeline
+- Frame scrubber slider for preview
+- Export processed video with codec selection
+- Live webcam feed with real-time filtering
 
 ---
 
@@ -213,42 +154,49 @@ jobs:
 
 ### 5.1 Plugin System
 
-- Define a simple plugin API:
+- Simple plugin API leveraging the modular pipeline:
   ```python
   class AlchemyPlugin:
       name: str
-      stage: str  # which pipeline stage it belongs to
+      stage: str  # pipeline stage this belongs to
       parameters: dict
       def process(self, image: np.ndarray, params: dict) -> np.ndarray: ...
   ```
-- Auto-discover plugins from `~/.alchemycv/plugins/` directory
-- Hot-reload without restarting the app
+- Auto-discover from `~/.alchemycv/plugins/`
+- Hot-reload without app restart
+- Built-in plugin template generator
 
-### 5.2 Node-Based Pipeline Editor
+### 5.2 Library Mode (Headless API)
 
-- Visual node graph for building custom pipelines (like Blender/Unreal nodes)
-- Drag connections between filter nodes
-- Fork/merge pipeline branches (e.g., process R/G/B channels differently, then merge)
-- Save/share pipeline graphs as JSON
+- Pipeline is already decoupled — formalize as a public API:
+  ```python
+  from alchemycv.pipeline import preprocessing, enhancement, edges
+  result = preprocessing.process(image, "Gaussian Blur", {"preproc_Kernel_Size": 5})
+  ```
+- Add `__all__` exports and stable API surface
+- Enables Jupyter notebook workflows and scripting
 
 ### 5.3 Standalone Executables
 
 - **Windows:** `.exe` via PyInstaller or Nuitka
-- **macOS:** `.dmg` / `.app` bundle
+- **macOS:** `.app` bundle via py2app
 - **Linux:** `.AppImage` or Flatpak
-- Auto-update mechanism (check GitHub releases on startup)
+- GitHub Actions workflow to build all three on release tags
+- Auto-update check against GitHub releases
 
-### 5.4 Library Mode
+### 5.4 Node-Based Pipeline Editor
 
-- After modularization (Phase 1), publish processing functions as a standalone library
-- `from alchemycv.pipeline import enhance, denoise, detect_edges`
-- Enables Jupyter notebook workflows and scripting without the GUI
+- Visual node graph (drag-and-drop) for building custom pipelines
+- Connect filter nodes with wires, fork/merge branches
+- Process RGB channels independently and recombine
+- Save/share pipeline graphs as JSON
+- This is a large undertaking — consider using an existing node framework
 
 ### 5.5 Localization (i18n)
 
-- Extract all UI strings to resource files
-- Support multiple languages
-- Community-contributed translations via JSON/YAML files
+- Extract all UI strings to resource files (JSON/YAML)
+- Language selector in settings
+- Community-contributed translations
 
 ---
 
@@ -262,20 +210,23 @@ jobs:
   - "Isolating objects by color"
   - "Counting cells in a microscopy image"
   - "Enhancing low-light photos"
-- Parameter reference with visual examples of each filter
+  - "Batch processing a photo folder"
+- Parameter reference: visual before/after for each filter
 - Video walkthrough of the full pipeline
 
 ### 6.2 Developer Documentation
 
-- Architecture overview with module dependency diagram
-- Contributing guide with testing and code style requirements
-- API reference for library mode (auto-generated with Sphinx/mkdocs)
+- Architecture diagram showing module dependencies
+- Contributing guide updated with testing & lint requirements
+- API reference for library mode (auto-generated with mkdocs or Sphinx)
+- Plugin development guide
 
-### 6.3 Example Presets
+### 6.3 Built-in Presets
 
-- Ship built-in presets for common tasks:
-  - "Sharpen Photo", "Vintage Film", "Edge Sketch", "Cell Counter", "License Plate Isolator"
-- Community preset sharing via GitHub repository or built-in preset browser
+- Ship preset configs for common workflows:
+  - "Sharpen Photo", "Vintage Film", "Edge Sketch", "Cell Counter", "Document Scanner"
+- Preset browser in the app with one-click apply
+- Community preset sharing via GitHub repo or in-app download
 
 ---
 
@@ -283,32 +234,47 @@ jobs:
 
 | Priority | Phase | Item | Impact | Effort |
 |----------|-------|------|--------|--------|
-| 1 | 1.1 | Modularize app.py | Unlocks everything | Large |
-| 2 | 1.2 | Decouple processing from UI | Testability + CLI | Medium |
-| 3 | 2.1 | Unit tests | Confidence to refactor | Medium |
-| 4 | 2.3 | CI pipeline | Catch regressions | Small |
-| 5 | 1.5 | Constants/enums for magic strings | Fewer silent bugs | Small |
-| 6 | 1.6 | Input validation | Crash prevention | Small |
-| 7 | 3.1 | Tooltips | User experience | Small |
-| 8 | 3.4 | Before/after comparison | User experience | Medium |
-| 9 | 4.1 | Batch processing | Major feature | Medium |
-| 10 | 4.2 | Video support | Major feature | Large |
-| 11 | 4.3 | More filters | Feature expansion | Medium |
+| 1 | 3.1 | Tooltips | UX — helps new users understand parameters | Small |
+| 2 | 3.2 | Per-stage reset buttons | UX — faster experimentation | Small |
+| 3 | 3.4 | Before/after comparison | UX — essential for parameter tuning | Medium |
+| 4 | 3.6 | Pixel inspector + cursor zoom | UX — precision work | Medium |
+| 5 | 4.1 | Batch processing + CLI | Major feature — unlocks automation | Medium |
+| 6 | 4.2 | More filters (denoising, segmentation) | Feature expansion | Medium |
+| 7 | 4.4 | Histogram & levels tools | Pro feature | Medium |
+| 8 | 3.3 | Progress indicator | UX — feedback for slow ops | Small |
+| 9 | 3.5 | Dark mode | UX — visual comfort | Small |
+| 10 | 5.2 | Library mode (headless API) | Enables scripting/notebooks | Small |
+| 11 | 5.3 | Standalone executables | Accessibility — no Python needed | Medium |
 | 12 | 5.1 | Plugin system | Extensibility | Large |
-| 13 | 5.3 | Standalone executables | Accessibility | Medium |
-| 14 | 5.2 | Node-based editor | Power users | Very Large |
+| 13 | 4.3 | ROI support | Advanced feature | Large |
+| 14 | 4.5 | Video support | Major feature | Large |
+| 15 | 5.4 | Node-based editor | Power users | Very Large |
+| 16 | 6.1 | User docs & tutorials | Community growth | Medium |
+| 17 | 6.3 | Built-in presets | Discoverability | Small |
 
 ---
 
-## Known Technical Debt
+## Remaining Technical Debt
 
-| Issue | Location | Risk |
-|-------|----------|------|
-| No tests | Entire project | High — regressions go unnoticed |
-| Monolithic class | `app.py:20-1175` | High — blocks all improvements |
-| Threading without synchronization | `app.py:644-652` | Medium — race conditions on rapid changes |
-| Hardcoded filter strings | Throughout | Medium — typos cause silent failures |
-| No parameter validation | Sliders/entries | Medium — invalid values crash OpenCV |
-| Frequency filter loses color | `app.py:777-814` | Low — converts to grayscale always |
-| Undo captures full state | `app.py:556-566` | Low — memory usage with large histories |
-| Settings fragile to renames | `app.py:1045-1086` | Low — saved JSON breaks if vars renamed |
+| Issue | Location | Risk | Notes |
+|-------|----------|------|-------|
+| Threading without cancellation | `app.py` apply_filter | Medium | Rapid changes can queue threads; no way to cancel long FFT ops |
+| Frequency filter loses color | `pipeline/frequency.py` | Low | Always converts to grayscale — could support per-channel FFT |
+| Undo captures full state | `state/manager.py` | Low | Memory grows with 20 snapshots; could diff instead |
+| Settings fragile to renames | `state/settings.py` | Low | Renaming a tkinter var breaks saved JSON files |
+| No UI tests | `ui/` package | Low | Hard to test tkinter in CI; consider screenshot regression tests |
+
+---
+
+## Current Stats
+
+| Metric | Value |
+|--------|-------|
+| Source files | 21 Python files |
+| Source lines | ~2,230 |
+| Test files | 11 + conftest |
+| Test lines | ~1,100 |
+| Test count | 140 |
+| Pipeline coverage | 97-100% |
+| CI checks | lint + format + test (3 Python versions) + build |
+| Filters/operations | 50+ across 7 pipeline stages |
