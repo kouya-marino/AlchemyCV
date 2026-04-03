@@ -30,8 +30,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install Xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
       - run: pip install -e ".[dev]"
-      - run: python -m pytest tests/ --cov=alchemycv --cov-report=xml -q
+      - run: xvfb-run python -m pytest tests/ --cov=alchemycv --cov-report=xml -q
       - name: Upload coverage
         if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4
